@@ -1,19 +1,9 @@
 "use client"
 
 import { useState, type FormEvent } from "react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-
 import { createClient } from "@/lib/supabase/client"
-import { Button } from "@/components/ui/button"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 
 export default function LoginPage() {
   const router = useRouter()
@@ -24,14 +14,12 @@ export default function LoginPage() {
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    if (!email || !senha) { setErro("Preencha todos os campos."); return }
     setErro(null)
     setCarregando(true)
 
     const supabase = createClient()
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: senha,
-    })
+    const { error } = await supabase.auth.signInWithPassword({ email, password: senha })
 
     if (error) {
       setErro("E-mail ou senha inválidos. Tente novamente.")
@@ -39,55 +27,125 @@ export default function LoginPage() {
       return
     }
 
-    router.push("/admin/produtos")
+    router.push("/admin/dashboard")
     router.refresh()
   }
 
   return (
-    <div className="flex flex-1 items-center justify-center bg-zinc-50 px-4 py-12 dark:bg-black">
-      <Card className="w-full max-w-sm">
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl">Margarida Kids</CardTitle>
-          <CardDescription>Acesso restrito ao painel administrativo</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">E-mail</Label>
-              <Input
-                id="email"
-                type="email"
-                placeholder="voce@exemplo.com"
-                autoComplete="email"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="senha">Senha</Label>
-              <Input
-                id="senha"
-                type="password"
-                autoComplete="current-password"
-                required
-                value={senha}
-                onChange={(event) => setSenha(event.target.value)}
-              />
-            </div>
+    <div style={{
+      minHeight: "100vh",
+      background: "#FAFAF9",
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      padding: "20px",
+      fontFamily: "var(--font-nunito), 'Nunito', sans-serif",
+    }}>
+      <div style={{
+        background: "#fff",
+        borderRadius: 12,
+        border: "1px solid #EDE8EA",
+        padding: "40px 32px 36px",
+        width: "100%",
+        maxWidth: 380,
+        boxShadow: "0 2px 16px rgba(0,0,0,0.06)",
+      }}>
+        {/* Logo */}
+        <div style={{ textAlign: "center", marginBottom: 32 }}>
+          <div style={{ display: "inline-flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
+            <div style={{
+              width: 100, height: 3, borderRadius: 2,
+              background: "linear-gradient(90deg,#93C5FD,#6EE7B7,#FBBF24,#F472B6)",
+            }}/>
+            <span style={{ fontWeight: 800, fontSize: 20, color: "#1C1917", letterSpacing: "-0.3px" }}>
+              Margarida Kids
+            </span>
+          </div>
+          <p style={{ color: "#A8A29E", fontSize: 13, marginTop: 8, fontWeight: 600 }}>
+            Painel administrativo
+          </p>
+        </div>
 
-            {erro && (
-              <p className="text-destructive text-sm" role="alert">
-                {erro}
-              </p>
-            )}
+        <form onSubmit={handleSubmit} style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+          <div>
+            <label style={{
+              fontWeight: 700, fontSize: 12, display: "block", marginBottom: 6,
+              color: "#78716C", textTransform: "uppercase", letterSpacing: "0.4px",
+            }}>E-mail</label>
+            <input
+              type="email"
+              placeholder="seu@email.com"
+              autoComplete="email"
+              required
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={{
+                width: "100%", padding: "13px 14px",
+                border: "1px solid #EDE8EA", borderRadius: 8,
+                fontFamily: "inherit", fontSize: 15, color: "#1C1917",
+                background: "#fff", outline: "none",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+              }}
+              onFocus={(e) => { e.target.style.borderColor = "#F472B6"; e.target.style.boxShadow = "0 0 0 3px rgba(244,114,182,0.10)" }}
+              onBlur={(e) => { e.target.style.borderColor = "#EDE8EA"; e.target.style.boxShadow = "none" }}
+            />
+          </div>
 
-            <Button type="submit" className="mt-2 w-full" disabled={carregando}>
-              {carregando ? "Entrando..." : "Entrar"}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+          <div>
+            <label style={{
+              fontWeight: 700, fontSize: 12, display: "block", marginBottom: 6,
+              color: "#78716C", textTransform: "uppercase", letterSpacing: "0.4px",
+            }}>Senha</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              required
+              value={senha}
+              onChange={(e) => setSenha(e.target.value)}
+              style={{
+                width: "100%", padding: "13px 14px",
+                border: "1px solid #EDE8EA", borderRadius: 8,
+                fontFamily: "inherit", fontSize: 15, color: "#1C1917",
+                background: "#fff", outline: "none",
+                transition: "border-color 0.15s, box-shadow 0.15s",
+              }}
+              onFocus={(e) => { e.target.style.borderColor = "#F472B6"; e.target.style.boxShadow = "0 0 0 3px rgba(244,114,182,0.10)" }}
+              onBlur={(e) => { e.target.style.borderColor = "#EDE8EA"; e.target.style.boxShadow = "none" }}
+            />
+          </div>
+
+          {erro && (
+            <div style={{
+              background: "#FEF2F2", border: "1px solid #FECACA",
+              borderRadius: 6, padding: "10px 14px",
+              fontSize: 13, color: "#DC2626", fontWeight: 600,
+            }} role="alert">{erro}</div>
+          )}
+
+          <button
+            type="submit"
+            disabled={carregando}
+            style={{
+              width: "100%", padding: 14, borderRadius: 8, border: "none",
+              background: "#1C1917", color: "#fff",
+              fontFamily: "inherit", fontWeight: 700, fontSize: 15,
+              cursor: carregando ? "not-allowed" : "pointer",
+              opacity: carregando ? 0.6 : 1,
+              marginTop: 4,
+              transition: "background 0.15s",
+            }}
+          >
+            {carregando ? "Entrando..." : "Entrar"}
+          </button>
+        </form>
+
+        <p style={{ textAlign: "center", fontSize: 12, color: "#A8A29E", marginTop: 24 }}>
+          <Link href="/" style={{ color: "#78716C", fontWeight: 600, textDecoration: "none" }}>
+            Ver catálogo público
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }
