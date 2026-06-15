@@ -116,3 +116,30 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* ── Admin responsive ── */
+@media (min-width: 768px) {
+  .sidebar-close-btn { display: none !important; }
+}
+
+/* ── Admin tables: horizontal scroll on mobile ── */
+@media (max-width: 640px) {
+  .admin-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin: 0 -14px;
+    padding: 0 14px;
+  }
+  .admin-table-inner {
+    min-width: 480px;
+  }
+  /* Modal: full screen on mobile */
+  .admin-modal-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    height: 100% !important;
+    max-height: 100% !important;
+    border-radius: 0 !important;
+    margin: 0 !important;
+  }
+}

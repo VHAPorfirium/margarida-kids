@@ -12,12 +12,14 @@ INSERT INTO auth.users (
   '00000000-0000-0000-0000-000000000000',
   'authenticated', 'authenticated',
   'sysadmin@admin.com',
-  '$2b$10$4yzpbr5YKaM6NEGTweXqoOrNyHtlTN.3Lk/CBadGBVN0PN4BBEx1G',
+  crypt('Admin@123', gen_salt('bf')),
   now(), now(), now(),
   '{"provider":"email","providers":["email"]}',
   '{"full_name":"Admin Margarida"}',
   false
-) ON CONFLICT (id) DO NOTHING;
+) ON CONFLICT (id) DO UPDATE SET
+  encrypted_password = crypt('Admin@123', gen_salt('bf')),
+  email_confirmed_at = COALESCE(auth.users.email_confirmed_at, now());
 
 INSERT INTO auth.identities (
   id, user_id, provider_id, provider, identity_data,
@@ -34,28 +36,28 @@ INSERT INTO auth.identities (
 -- ── 2. PRODUTOS (genero: feminino/masculino/unissex | faixa_etaria obrigatorio) ──
 INSERT INTO produtos (id, nome, descricao, preco, genero, faixa_etaria, estacao, status, fotos) VALUES
   -- FEMININO
-  ('a1000001-0000-0000-0000-000000000001','Vestido Floral Rosa',         'Vestido leve com estampa floral em tons de rosa.',          89.90, 'feminino', '2-4 anos',   'verao',     'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000002','Conjunto Saia e Blusa Lilas', 'Conjunto com saia evase e blusa de alcinha.',              134.90, 'feminino', '4-6 anos',   'primavera', 'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000003','Legging Estampada Borboletas','Legging com estampa de borboletas.',                       54.90, 'feminino', '2-4 anos',   'todas',     'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000004','Vestido de Inverno Xadrez',   'Vestido quentinho xadrez com mangas longas.',             119.90, 'feminino', '6-8 anos',   'inverno',   'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000005','Sainha Jeans com Lycra',      'Saia jeans com elastano para maior mobilidade.',           79.90, 'feminino', '4-6 anos',   'todas',     'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000006','Blusao de Frio Rosa',         'Moletom macio com capuz e bolso canguru.',                 99.90, 'feminino', '6-8 anos',   'inverno',   'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000007','Vestido Tie-Dye Colorido',    'Vestido tie-dye leve para os dias quentes.',               74.90, 'feminino', '2-4 anos',   'verao',     'disponivel', '{}'),
-  ('a1000001-0000-0000-0000-000000000008','Conjunto Inverno Pelucia',    'Conjunto calca e casaco de pelucia super macio.',         189.90, 'feminino', '4-6 anos',   'inverno',   'inativo',    '{}'),
+  ('a1000001-0000-0000-0000-000000000001','Vestido Floral Rosa',         'Vestido leve com estampa floral em tons de rosa.',          89.90, 'feminino', '2-4 anos',   'verao',     'disponivel', ARRAY['https://picsum.photos/seed/vestido-floral-1/600/750','https://picsum.photos/seed/vestido-floral-2/600/750','https://picsum.photos/seed/vestido-floral-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000002','Conjunto Saia e Blusa Lilas', 'Conjunto com saia evase e blusa de alcinha.',              134.90, 'feminino', '4-6 anos',   'primavera', 'disponivel', ARRAY['https://picsum.photos/seed/conjunto-saia-1/600/750','https://picsum.photos/seed/conjunto-saia-2/600/750','https://picsum.photos/seed/conjunto-saia-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000003','Legging Estampada Borboletas','Legging com estampa de borboletas.',                       54.90, 'feminino', '2-4 anos',   'todas',     'disponivel', ARRAY['https://picsum.photos/seed/legging-borboleta-1/600/750','https://picsum.photos/seed/legging-borboleta-2/600/750','https://picsum.photos/seed/legging-borboleta-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000004','Vestido de Inverno Xadrez',   'Vestido quentinho xadrez com mangas longas.',             119.90, 'feminino', '6-8 anos',   'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/vestido-inverno-1/600/750','https://picsum.photos/seed/vestido-inverno-2/600/750','https://picsum.photos/seed/vestido-inverno-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000005','Sainha Jeans com Lycra',      'Saia jeans com elastano para maior mobilidade.',           79.90, 'feminino', '4-6 anos',   'todas',     'disponivel', ARRAY['https://picsum.photos/seed/sainha-jeans-1/600/750','https://picsum.photos/seed/sainha-jeans-2/600/750','https://picsum.photos/seed/sainha-jeans-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000006','Blusao de Frio Rosa',         'Moletom macio com capuz e bolso canguru.',                 99.90, 'feminino', '6-8 anos',   'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/blusao-rosa-1/600/750','https://picsum.photos/seed/blusao-rosa-2/600/750','https://picsum.photos/seed/blusao-rosa-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000007','Vestido Tie-Dye Colorido',    'Vestido tie-dye leve para os dias quentes.',               74.90, 'feminino', '2-4 anos',   'verao',     'disponivel', ARRAY['https://picsum.photos/seed/vestido-tiedye-1/600/750','https://picsum.photos/seed/vestido-tiedye-2/600/750','https://picsum.photos/seed/vestido-tiedye-3/600/750']),
+  ('a1000001-0000-0000-0000-000000000008','Conjunto Inverno Pelucia',    'Conjunto calca e casaco de pelucia super macio.',         189.90, 'feminino', '4-6 anos',   'inverno',   'inativo',    ARRAY['https://picsum.photos/seed/conjunto-pelucia-1/600/750','https://picsum.photos/seed/conjunto-pelucia-2/600/750','https://picsum.photos/seed/conjunto-pelucia-3/600/750']),
   -- MASCULINO
-  ('b2000001-0000-0000-0000-000000000001','Conjunto Camiseta e Bermuda', 'Conjunto algodao com estampa de dinossauro.',              99.90, 'masculino','4-6 anos',   'verao',     'disponivel', '{}'),
-  ('b2000001-0000-0000-0000-000000000002','Calca Moletom Azul Marinho',  'Calca de moletom confortavel para o dia a dia.',           79.90, 'masculino','6-8 anos',   'inverno',   'disponivel', '{}'),
-  ('b2000001-0000-0000-0000-000000000003','Camisa Social Mini',          'Camisa social de algodao para eventos especiais.',         89.90, 'masculino','4-6 anos',   'todas',     'disponivel', '{}'),
-  ('b2000001-0000-0000-0000-000000000004','Conjunto Jeans e Camiseta',   'Calca jeans slim e camiseta listrada.',                  149.90, 'masculino','8-10 anos',  'todas',     'disponivel', '{}'),
-  ('b2000001-0000-0000-0000-000000000005','Jaqueta Corta-Vento Azul',    'Jaqueta leve com capuz escondido na gola.',              129.90, 'masculino','6-8 anos',   'outono',    'disponivel', '{}'),
-  ('b2000001-0000-0000-0000-000000000006','Short de Praia Estampado',    'Short de tactel com estampa de tubaraoes.',               59.90, 'masculino','2-4 anos',   'verao',     'disponivel', '{}'),
+  ('b2000001-0000-0000-0000-000000000001','Conjunto Camiseta e Bermuda', 'Conjunto algodao com estampa de dinossauro.',              99.90, 'masculino','4-6 anos',   'verao',     'disponivel', ARRAY['https://picsum.photos/seed/camiseta-bermuda-1/600/750','https://picsum.photos/seed/camiseta-bermuda-2/600/750','https://picsum.photos/seed/camiseta-bermuda-3/600/750']),
+  ('b2000001-0000-0000-0000-000000000002','Calca Moletom Azul Marinho',  'Calca de moletom confortavel para o dia a dia.',           79.90, 'masculino','6-8 anos',   'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/calca-moletom-1/600/750','https://picsum.photos/seed/calca-moletom-2/600/750','https://picsum.photos/seed/calca-moletom-3/600/750']),
+  ('b2000001-0000-0000-0000-000000000003','Camisa Social Mini',          'Camisa social de algodao para eventos especiais.',         89.90, 'masculino','4-6 anos',   'todas',     'disponivel', ARRAY['https://picsum.photos/seed/camisa-social-1/600/750','https://picsum.photos/seed/camisa-social-2/600/750','https://picsum.photos/seed/camisa-social-3/600/750']),
+  ('b2000001-0000-0000-0000-000000000004','Conjunto Jeans e Camiseta',   'Calca jeans slim e camiseta listrada.',                  149.90, 'masculino','8-10 anos',  'todas',     'disponivel', ARRAY['https://picsum.photos/seed/conjunto-jeans-1/600/750','https://picsum.photos/seed/conjunto-jeans-2/600/750','https://picsum.photos/seed/conjunto-jeans-3/600/750']),
+  ('b2000001-0000-0000-0000-000000000005','Jaqueta Corta-Vento Azul',    'Jaqueta leve com capuz escondido na gola.',              129.90, 'masculino','6-8 anos',   'outono',    'disponivel', ARRAY['https://picsum.photos/seed/jaqueta-vento-1/600/750','https://picsum.photos/seed/jaqueta-vento-2/600/750','https://picsum.photos/seed/jaqueta-vento-3/600/750']),
+  ('b2000001-0000-0000-0000-000000000006','Short de Praia Estampado',    'Short de tactel com estampa de tubaraoes.',               59.90, 'masculino','2-4 anos',   'verao',     'disponivel', ARRAY['https://picsum.photos/seed/short-praia-1/600/750','https://picsum.photos/seed/short-praia-2/600/750','https://picsum.photos/seed/short-praia-3/600/750']),
   -- UNISSEX
-  ('c3000001-0000-0000-0000-000000000001','Body Manga Curta Branco',     'Body de algodao 100% para bebes.',                        39.90, 'unissex',  '0-3 meses',  'todas',     'disponivel', '{}'),
-  ('c3000001-0000-0000-0000-000000000002','Macacao Listrado',            'Macacao listrado azul e branco para passeios.',            89.90, 'unissex',  '3-6 meses',  'verao',     'disponivel', '{}'),
-  ('c3000001-0000-0000-0000-000000000003','Pijama Estampado Estrelas',   'Pijama quentinho com estampa de estrelas.',              109.90, 'unissex',  '2-4 anos',   'inverno',   'disponivel', '{}'),
-  ('c3000001-0000-0000-0000-000000000004','Body Manga Longa Cinza',      'Body termico para os dias frios.',                        49.90, 'unissex',  '6-12 meses', 'inverno',   'disponivel', '{}'),
-  ('c3000001-0000-0000-0000-000000000005','Macacao de Plush Bege',       'Macacao quentissimo de plush com orelhinhas no capuz.',  159.90, 'unissex',  '6-12 meses', 'inverno',   'disponivel', '{}')
-ON CONFLICT (id) DO NOTHING;
+  ('c3000001-0000-0000-0000-000000000001','Body Manga Curta Branco',     'Body de algodao 100% para bebes.',                        39.90, 'unissex',  '0-3 meses',  'todas',     'disponivel', ARRAY['https://picsum.photos/seed/body-branco-1/600/750','https://picsum.photos/seed/body-branco-2/600/750','https://picsum.photos/seed/body-branco-3/600/750']),
+  ('c3000001-0000-0000-0000-000000000002','Macacao Listrado',            'Macacao listrado azul e branco para passeios.',            89.90, 'unissex',  '3-6 meses',  'verao',     'disponivel', ARRAY['https://picsum.photos/seed/macacao-listrado-1/600/750','https://picsum.photos/seed/macacao-listrado-2/600/750','https://picsum.photos/seed/macacao-listrado-3/600/750']),
+  ('c3000001-0000-0000-0000-000000000003','Pijama Estampado Estrelas',   'Pijama quentinho com estampa de estrelas.',              109.90, 'unissex',  '2-4 anos',   'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/pijama-estrelas-1/600/750','https://picsum.photos/seed/pijama-estrelas-2/600/750','https://picsum.photos/seed/pijama-estrelas-3/600/750']),
+  ('c3000001-0000-0000-0000-000000000004','Body Manga Longa Cinza',      'Body termico para os dias frios.',                        49.90, 'unissex',  '6-12 meses', 'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/body-cinza-1/600/750','https://picsum.photos/seed/body-cinza-2/600/750','https://picsum.photos/seed/body-cinza-3/600/750']),
+  ('c3000001-0000-0000-0000-000000000005','Macacao de Plush Bege',       'Macacao quentissimo de plush com orelhinhas no capuz.',  159.90, 'unissex',  '6-12 meses', 'inverno',   'disponivel', ARRAY['https://picsum.photos/seed/macacao-plush-1/600/750','https://picsum.photos/seed/macacao-plush-2/600/750','https://picsum.photos/seed/macacao-plush-3/600/750'])
+ON CONFLICT (id) DO UPDATE SET fotos = EXCLUDED.fotos WHERE array_length(produtos.fotos, 1) IS NULL OR array_length(produtos.fotos, 1) = 0;
 
 -- ── 3. VARIAÇÕES DE ESTOQUE ───────────────────────────────────────────
 INSERT INTO variacoes_estoque (produto_id, tamanho, quantidade_disponivel, quantidade_total) VALUES
