@@ -6,7 +6,6 @@ import Image from "next/image"
 import { toast } from "sonner"
 import { ImagePlus, Loader2, X } from "lucide-react"
 
-import { createClient } from "@/lib/supabase/client"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
@@ -140,31 +139,29 @@ export function ProdutoForm() {
     }
 
     setSalvando(true)
-    const supabase = createClient()
 
     try {
       // 1. Upload das fotos
       const urlsFotos: string[] = []
       for (const imagem of imagens) {
-        const extensao = imagem.arquivo.name.split(".").pop() ?? "jpg"
-        const caminho = `${crypto.randomUUID()}.${extensao}`
-
-        const { error: erroUpload } = await supabase.storage
-          .from("produtos")
-          .upload(caminho, imagem.arquivo, { cacheControl: "3600", upsert: false })
-
-        if (erroUpload) {
-          throw new Error(`Falha ao enviar imagem "${imagem.arquivo.name}": ${erroUpload.message}`)
-        }
-
-        const { data: publicUrlData } = supabase.storage.from("produtos").getPublicUrl(caminho)
-        urlsFotos.push(publicUrlData.publicUrl)
+        const fd = new FormData()
+        fd.append("file", imagem.arquivo)
+        const res = await fetch("/api/admin/upload", { method: "POST", body: fd })
+        const json = await res.json()
+        if (!res.ok) throw new Error(`Falha ao enviar imagem "${imagem.arquivo.name}": ${json.error ?? res.statusText}`)
+        urlsFotos.push(json.url)
       }
 
-      // 2. Inserir produto
-      const { data: produtoCriado, error: erroProduto } = await supabase
-        .from("produtos")
-        .insert({
+      // 2. Inserir produto + variações
+      const variacoes = tamanhos.map(([tamanho, quantidade]) => ({
+        tamanho,
+        quantidade: Math.max(0, Number(quantidade) || 0),
+      }))
+
+      const res = await fetch("/api/admin/produtos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           nome,
           descricao: descricao || null,
           preco: precoNumerico,
@@ -174,30 +171,11 @@ export function ProdutoForm() {
           estacao: estacao || null,
           status,
           fotos: urlsFotos,
-        })
-        .select("id")
-        .single()
-
-      if (erroProduto || !produtoCriado) {
-        throw new Error(erroProduto?.message ?? "Não foi possível criar o produto.")
-      }
-
-      // 3. Inserir variações de estoque
-      const variacoes = tamanhos.map(([tamanho, quantidade]) => {
-        const quantidadeNumerica = Math.max(0, Number(quantidade) || 0)
-        return {
-          produto_id: produtoCriado.id,
-          tamanho,
-          quantidade_total: quantidadeNumerica,
-          quantidade_disponivel: quantidadeNumerica,
-        }
+          variacoes,
+        }),
       })
-
-      const { error: erroVariacoes } = await supabase.from("variacoes_estoque").insert(variacoes)
-
-      if (erroVariacoes) {
-        throw new Error(`Produto criado, mas houve falha ao salvar as variações: ${erroVariacoes.message}`)
-      }
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error ?? "Não foi possível criar o produto.")
 
       toast.success("Produto cadastrado com sucesso!")
       resetar()

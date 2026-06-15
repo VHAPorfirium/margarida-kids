@@ -2,7 +2,6 @@
 
 import { useState, useMemo } from "react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
 
 /* ════════════════════════════════════════════
    TYPES
@@ -11,12 +10,11 @@ interface Pedido {
   id: string; cliente_nome: string; cliente_telefone: string
   total: number; status: string; tipo: string; items: ItemPedido[]; criado_em: string
 }
-interface ItemPedido { nome: string; tamanho: string; quantidade: number; preco: number }
+interface ItemPedido { nome: string; tamanho: string; quantidade?: number; qty?: number; preco: number }
 
 export interface WeekDay { day: string; val: number }
 export interface DonutSlice { label: string; val: number; color: string }
 export interface LowStockItem { produto_id: string; produto_nome: string | null; tamanho: string; quantidade_disponivel: number }
-// Legacy exports kept for compatibility
 export interface PedidoResumo { id: string; cliente_nome: string; total: number; status: string; criado_em: string; items: ItemPedido[] }
 
 /* ════════════════════════════════════════════
@@ -42,7 +40,7 @@ function filterPedidos(pedidos: Pedido[], filterDay: string, filterMonth: string
 /* ════════════════════════════════════════════
    BAR CHART
 ════════════════════════════════════════════ */
-function BarChart({ data, label }: { data: { key: string; val: number; highlight?: boolean }[]; label?: string }) {
+function BarChart({ data }: { data: { key: string; val: number; highlight?: boolean }[] }) {
   const max = Math.max(...data.map((d) => d.val), 1)
   const H = 80
   return (
@@ -109,6 +107,40 @@ function StatusDonut({ data }: { data: DonutSlice[] }) {
 /* ════════════════════════════════════════════
    DATE FILTER BAR
 ════════════════════════════════════════════ */
+const MESES = ["Jan","Fev","Mar","Abr","Mai","Jun","Jul","Ago","Set","Out","Nov","Dez"]
+
+function MonthSelect({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  const now = new Date()
+  const currentYear = now.getFullYear()
+  // value format: "YYYY-MM" or ""
+  const selectedMonth = value ? parseInt(value.split("-")[1]) - 1 : -1
+
+  function toggle(idx: number) {
+    const monthStr = String(idx + 1).padStart(2, "0")
+    const newVal = `${currentYear}-${monthStr}`
+    onChange(value === newVal ? "" : newVal)
+  }
+
+  return (
+    <div style={{ display: "flex", gap: 4, flexWrap: "wrap" }}>
+      {MESES.map((m, i) => {
+        const active = selectedMonth === i
+        return (
+          <button key={m} type="button" onClick={() => toggle(i)}
+            style={{
+              padding: "4px 10px", borderRadius: 20, border: active ? "1.5px solid #F472B6" : "1px solid #EDE8EA",
+              background: active ? "#FDF2F8" : "#fff", color: active ? "#F472B6" : "#78716C",
+              fontFamily: "inherit", fontSize: 12, fontWeight: active ? 700 : 500,
+              cursor: "pointer", transition: "all .15s",
+            }}>
+            {m}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function DateFilterBar({ filterDay, filterMonth, onDayChange, onMonthChange, onClear }:
   { filterDay: string; filterMonth: string; onDayChange: (v: string) => void; onMonthChange: (v: string) => void; onClear: () => void }) {
   const hasFilter = !!filterDay || !!filterMonth
@@ -123,10 +155,9 @@ function DateFilterBar({ filterDay, filterMonth, onDayChange, onMonthChange, onC
         <input type="date" value={filterDay} onChange={(e) => { onDayChange(e.target.value); if (e.target.value) onMonthChange("") }}
           style={{ padding: "5px 8px", border: "1px solid #EDE8EA", borderRadius: 6, fontSize: 12, fontFamily: "inherit", outline: "none", background: filterDay ? "#FDF2F8" : "#fff", color: filterDay ? "#F472B6" : "#1C1917", fontWeight: filterDay ? 700 : 400 }} />
       </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <label style={{ fontSize: 11, color: "#A8A29E", fontWeight: 600 }}>Mes</label>
-        <input type="month" value={filterMonth} onChange={(e) => { onMonthChange(e.target.value); if (e.target.value) onDayChange("") }}
-          style={{ padding: "5px 8px", border: "1px solid #EDE8EA", borderRadius: 6, fontSize: 12, fontFamily: "inherit", outline: "none", background: filterMonth ? "#FDF2F8" : "#fff", color: filterMonth ? "#F472B6" : "#1C1917", fontWeight: filterMonth ? 700 : 400 }} />
+      <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+        <label style={{ fontSize: 11, color: "#A8A29E", fontWeight: 600, flexShrink: 0 }}>Mês:</label>
+        <MonthSelect value={filterMonth} onChange={(v) => { onMonthChange(v); if (v) onDayChange("") }} />
       </div>
       {hasFilter && (
         <button onClick={onClear}
@@ -144,15 +175,94 @@ function DateFilterBar({ filterDay, filterMonth, onDayChange, onMonthChange, onC
 }
 
 /* ════════════════════════════════════════════
+   PEDIDO DETAIL MODAL (dashboard)
+════════════════════════════════════════════ */
+function PedidoDetailModal({ pedido, onClose, onConfirm, confirming }: {
+  pedido: Pedido
+  onClose: () => void
+  onConfirm: (id: string) => void
+  confirming: string | null
+}) {
+  const time = new Date(pedido.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
+  const date = new Date(pedido.criado_em).toLocaleDateString("pt-BR")
+  const total = pedido.items.reduce((s, i) => s + i.preco * (i.quantidade ?? i.qty ?? 1), 0)
+  return (
+    <>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 400 }} />
+      <div style={{
+        position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+        zIndex: 401, background: "#fff", borderRadius: 16,
+        boxShadow: "0 8px 40px rgba(0,0,0,.16)",
+        width: "min(480px,92vw)", maxHeight: "85vh",
+        display: "flex", flexDirection: "column",
+        fontFamily: "inherit",
+        animation: "modalIn .18s ease",
+      }}>
+        <style>{`@keyframes modalIn{from{opacity:0;transform:translate(-50%,-48%)}to{opacity:1;transform:translate(-50%,-50%)}}`}</style>
+        {/* Header */}
+        <div style={{ padding: "18px 20px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
+          <button onClick={onClose} style={{ width: 30, height: 30, borderRadius: "50%", background: "#F5F5F4", border: "none", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#78716C" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: 800, fontSize: 15, color: "#1C1917" }}>{pedido.cliente_nome}</div>
+            <div style={{ fontSize: 11, color: "#A8A29E", marginTop: 1 }}>{date} às {time}</div>
+          </div>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5, background: "#FEF9C3", color: "#92400E", borderRadius: 4, padding: "3px 9px", fontSize: 11, fontWeight: 700 }}>
+            <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#FBBF24", display: "inline-block" }} />
+            Aguardando
+          </span>
+        </div>
+        {/* Body */}
+        <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+          {/* Cliente */}
+          <div style={{ background: "#FAFAF9", border: "1px solid #EDE8EA", borderRadius: 8, padding: "10px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 6 }}>Cliente</div>
+            <div style={{ fontWeight: 700, fontSize: 14, color: "#1C1917" }}>{pedido.cliente_nome}</div>
+            {pedido.cliente_telefone && (
+              <a href={"https://wa.me/55" + pedido.cliente_telefone.replace(/\D/g, "")} target="_blank" rel="noreferrer"
+                style={{ fontSize: 12, color: "#16A34A", fontWeight: 600, textDecoration: "none" }}>
+                Contato no WhatsApp
+              </a>
+            )}
+          </div>
+          {/* Itens */}
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#A8A29E", textTransform: "uppercase", letterSpacing: "0.4px", marginBottom: 8 }}>Itens</div>
+          {pedido.items.map((it, i) => (
+            <div key={i} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "9px 0", borderBottom: "1px solid #F5F0F2", fontSize: 13 }}>
+              <div>
+                <span style={{ fontWeight: 700 }}>{it.nome}</span>
+                <span style={{ color: "#A8A29E", marginLeft: 6 }}>Tam. {it.tamanho} x {it.quantidade ?? it.qty ?? 1}</span>
+              </div>
+              <span style={{ fontWeight: 700 }}>{fmt(it.preco * (it.quantidade ?? it.qty ?? 1))}</span>
+            </div>
+          ))}
+          <div style={{ display: "flex", justifyContent: "space-between", padding: "10px 0", fontWeight: 800, fontSize: 15 }}>
+            <span>Total</span><span style={{ color: "#F472B6" }}>{fmt(total)}</span>
+          </div>
+        </div>
+        {/* Footer */}
+        <div style={{ padding: "14px 20px 18px", borderTop: "1px solid #EDE8EA", display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
+          <button onClick={() => onConfirm(pedido.id)} disabled={confirming === pedido.id}
+            style={{ display: "block", width: "100%", padding: 13, borderRadius: 8, border: "none", background: confirming === pedido.id ? "#E5E0DC" : "#16A34A", color: "#fff", fontFamily: "inherit", fontWeight: 700, fontSize: 14, cursor: confirming === pedido.id ? "not-allowed" : "pointer" }}>
+            {confirming === pedido.id ? "Confirmando..." : "Confirmar pedido"}
+          </button>
+          <Link href="/admin/pedidos" onClick={onClose}
+            style={{ display: "block", width: "100%", padding: 11, borderRadius: 8, border: "1px solid #EDE8EA", background: "#fff", color: "#78716C", fontFamily: "inherit", fontWeight: 600, fontSize: 13, cursor: "pointer", textDecoration: "none", textAlign: "center", boxSizing: "border-box" }}>
+            Ver no gerenciador de pedidos
+          </Link>
+        </div>
+      </div>
+    </>
+  )
+}
+
+/* ════════════════════════════════════════════
    COMPUTE METRICS
 ════════════════════════════════════════════ */
 function computeMetrics(pedidos: Pedido[], filterDay: string, filterMonth: string) {
   const now = new Date()
-
-  // Scope: filtered pedidos
   const scoped = filterPedidos(pedidos, filterDay, filterMonth)
-
-  // If no filter, default scope = current month
   const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
   const defaultScoped = pedidos.filter((p) => p.criado_em >= startOfMonth)
   const active = (filterDay || filterMonth) ? scoped : defaultScoped
@@ -163,10 +273,8 @@ function computeMetrics(pedidos: Pedido[], filterDay: string, filterMonth: strin
   const aReceber = pedidos.filter((p) => p.tipo === "confianca" && (p.status === "cf_entregue" || p.status === "cf_aguardando")).reduce((s, p) => s + (p.total ?? 0), 0)
   const pendingOrders = pedidos.filter((p) => p.status === "aguardando")
 
-  // Bar chart data
   let barData: { key: string; val: number; highlight?: boolean }[] = []
   if (filterDay) {
-    // hourly buckets
     const hours = ["0-4h", "4-8h", "8-12h", "12-16h", "16-20h", "20-24h"]
     const buckets: Record<string, number> = {}
     hours.forEach((h) => { buckets[h] = 0 })
@@ -180,7 +288,6 @@ function computeMetrics(pedidos: Pedido[], filterDay: string, filterMonth: strin
     const nowHour = now.getHours()
     barData = hours.map((k) => ({ key: k, val: Math.round(buckets[k]), highlight: Math.floor(nowHour / 4) === hours.indexOf(k) && toLocalDate(now.toISOString()) === filterDay }))
   } else if (filterMonth) {
-    // weekly buckets within the month
     const [yr, mo] = filterMonth.split("-").map(Number)
     const daysInMonth = new Date(yr, mo, 0).getDate()
     const weeks: { key: string; start: number; end: number }[] = []
@@ -200,7 +307,6 @@ function computeMetrics(pedidos: Pedido[], filterDay: string, filterMonth: strin
     const todayDay = now.getDate()
     barData = weeks.map((w) => ({ key: w.key, val: Math.round(buckets[w.key]), highlight: todayDay >= w.start && todayDay <= w.end && toLocalMonth(now.toISOString()) === filterMonth }))
   } else {
-    // last 7 days
     const dayLabels = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sab"]
     const weekMap: Record<string, number> = {}
     for (let i = 6; i >= 0; i--) {
@@ -221,14 +327,13 @@ function computeMetrics(pedidos: Pedido[], filterDay: string, filterMonth: strin
     barData = Object.entries(weekMap).map(([key, val]) => ({ key, val: Math.round(val), highlight: key === todayLabel }))
   }
 
-  // Donut
   const STATUS_DONUT = [
     { status: "entregue",     label: "Entregues",       color: "#22C55E" },
     { status: "enviado",      label: "Enviados",         color: "#F97316" },
-    { status: "separacao",    label: "Separacao",        color: "#A78BFA" },
+    { status: "separacao",    label: "Separação",        color: "#A78BFA" },
     { status: "confirmado",   label: "Confirmados",      color: "#60A5FA" },
     { status: "aguardando",   label: "Aguardando",       color: "#FCD34D" },
-    { status: "cf_pago",      label: "Confianca pago",   color: "#34D399" },
+    { status: "cf_pago",      label: "Confiança pago",   color: "#34D399" },
     { status: "cf_aguardando",label: "Conf. a receber",  color: "#FDE68A" },
   ]
   const donutData: DonutSlice[] = STATUS_DONUT.map(({ status, label, color }) => ({
@@ -262,6 +367,7 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
   const [filterMonth, setFilterMonth] = useState("")
   const [confirming, setConfirming] = useState<string | null>(null)
   const [localPedidos, setLocalPedidos] = useState<Pedido[]>(allPedidos as unknown as Pedido[])
+  const [detailPedido, setDetailPedido] = useState<Pedido | null>(null)
 
   const { receitaMes, aReceber, pendingOrders, barData, donutData, active, periodLabel, barSubLabel } = useMemo(
     () => computeMetrics(localPedidos, filterDay, filterMonth),
@@ -270,26 +376,25 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
 
   async function confirmOrder(id: string) {
     setConfirming(id)
-    const supabase = createClient()
-    await supabase.from("pedidos").update({ status: "confirmado" }).eq("id", id)
+    await fetch("/api/admin/pedidos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, status: "confirmado" }) })
     setLocalPedidos((prev) => prev.map((p) => p.id === id ? { ...p, status: "confirmado" } : p))
     setConfirming(null)
+    setDetailPedido(null)
   }
 
-  // Low stock (not affected by date filter)
   const prodMap = Object.fromEntries(produtos.map((p) => [p.id, p.nome]))
   const lowStock: LowStockItem[] = variacoes
     .filter((v) => v.quantidade_disponivel > 0 && v.quantidade_disponivel <= 3)
     .slice(0, 6)
     .map((v) => ({ produto_id: v.produto_id, produto_nome: prodMap[v.produto_id] ?? null, tamanho: v.tamanho, quantidade_disponivel: v.quantidade_disponivel }))
 
-  // Recent orders (affected by filter)
-  const recentOrders = active.slice(0, 5)
+  const todayStr = new Date().toLocaleDateString("pt-BR")
+  const todayOrders = [...localPedidos].filter((p) => new Date(p.criado_em).toLocaleDateString("pt-BR") === todayStr).sort((a, b) => new Date(b.criado_em).getTime() - new Date(a.criado_em).getTime())
 
   const STATUS_META: Record<string, { label: string; bg: string; color: string; dot: string }> = {
     aguardando: { label: "Aguardando", bg: "#FEF9C3", color: "#92400E", dot: "#FBBF24" },
     confirmado: { label: "Confirmado", bg: "#EFF6FF", color: "#1D4ED8", dot: "#60A5FA" },
-    separacao:  { label: "Separacao",  bg: "#FAF5FF", color: "#7C3AED", dot: "#A78BFA" },
+    separacao:  { label: "Separação",  bg: "#FAF5FF", color: "#7C3AED", dot: "#A78BFA" },
     enviado:    { label: "Enviado",    bg: "#FFF7ED", color: "#C2410C", dot: "#FB923C" },
     entregue:   { label: "Entregue",   bg: "#F0FDF4", color: "#16A34A", dot: "#4ADE80" },
     cancelado:  { label: "Cancelado",  bg: "#F5F5F4", color: "#78716C", dot: "#A8A29E" },
@@ -318,31 +423,25 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
       border: "#EDE8EA",
     },
     {
-      label: "Aguardando confirmacao",
+      label: "Aguardando confirmação",
       value: String(pendingOrders.length),
-      sub: "Requerem atencao",
+      sub: "Requerem atenção",
       subColor: "#92400E",
       border: "#FDE68A",
       bg: "#FFFBEB",
-    },
-    {
-      label: "Estoque baixo",
-      value: String(lowStock.length),
-      sub: "Variacoes para repor",
-      subColor: "#DC2626",
-      border: "#FECACA",
-      bg: "#FEF2F2",
     },
   ]
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "inherit" }}>
-      {/* Header + filter */}
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <h1 style={{ fontWeight: 800, fontSize: 22, color: "#1C1917" }}>{saudacao}, Margarida 👋</h1>
-          <p style={{ color: "#A8A29E", fontSize: 13, marginTop: 2, textTransform: "capitalize" }}>{dataFormatada}</p>
-        </div>
+      {/* Header */}
+      <div>
+        <h1 style={{ fontWeight: 800, fontSize: 22, color: "#1C1917" }}>{saudacao}, Margarida 👋</h1>
+        <p style={{ color: "#A8A29E", fontSize: 13, marginTop: 2, textTransform: "capitalize" }}>{dataFormatada}</p>
+      </div>
+
+      {/* Filter — linha própria para evitar layout shift */}
+      <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, padding: "12px 16px" }}>
         <DateFilterBar
           filterDay={filterDay}
           filterMonth={filterMonth}
@@ -353,7 +452,7 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
       </div>
 
       {/* Metrics */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
         {metrics.map((m) => (
           <div key={m.label} style={{ background: m.bg ?? "#fff", border: `1px solid ${m.border}`, borderRadius: 10, padding: "18px 20px" }}>
             <div style={{ fontWeight: 800, fontSize: 24, lineHeight: 1, marginBottom: 4 }}>{m.value}</div>
@@ -364,7 +463,7 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
       </div>
 
       {/* Charts */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
         <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, padding: "18px 20px" }}>
           <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
             <div>
@@ -372,7 +471,7 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
               <div style={{ fontSize: 11, color: "#A8A29E", marginTop: 2 }}>{barSubLabel}</div>
             </div>
             <div style={{ fontWeight: 800, fontSize: 15, color: "#F472B6" }}>
-              {fmt(barData.reduce((s, d) => s + d.val, 0))}
+              {fmt(receitaMes)}
             </div>
           </div>
           <BarChart data={barData} />
@@ -385,18 +484,18 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
       </div>
 
       {/* Bottom cards */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 12 }}>
         {/* Pending */}
-        <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, overflow: "hidden" }}>
+        <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: "clamp(240px, 50vw, 420px)" }}>
           <div style={{ padding: "16px 18px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>Aguardando confirmacao</span>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Aguardando confirmação</span>
             {pendingOrders.length > 0 && (
               <span style={{ background: "#FEF9C3", color: "#92400E", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
                 {pendingOrders.length} pendente{pendingOrders.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <div>
+          <div style={{ flex: 1 }}>
             {pendingOrders.length === 0 ? (
               <div style={{ padding: "28px 18px", textAlign: "center", color: "#A8A29E" }}>
                 <div style={{ fontWeight: 700, fontSize: 13 }}>Tudo em dia!</div>
@@ -406,7 +505,7 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
               const summary = p.items.map((i) => `${i.nome.split(" ").slice(0, 2).join(" ")} (${i.tamanho})`).join(", ")
               const time = new Date(p.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
               return (
-                <div key={p.id} style={{ padding: "11px 18px", borderBottom: "1px solid #F5F0F2", display: "flex", gap: 12, alignItems: "flex-start" }}>
+                <div key={p.id} style={{ padding: "11px 18px", borderBottom: "1px solid #F5F0F2", display: "flex", gap: 12, alignItems: "center" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                       <span style={{ fontWeight: 700, fontSize: 13 }}>{p.cliente_nome}</span>
@@ -416,93 +515,68 @@ export function DashboardClient({ allPedidos, variacoes, produtos, saudacao, dat
                     <div style={{ fontWeight: 800, color: "#F472B6", fontSize: 13 }}>{fmt(p.total)}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flexShrink: 0 }}>
-                    <button onClick={() => confirmOrder(p.id)} disabled={confirming === p.id}
-                      style={{ background: "#16A34A", color: "#fff", border: "none", borderRadius: 6, padding: "7px 14px", fontFamily: "inherit", fontWeight: 700, fontSize: 12, cursor: "pointer", opacity: confirming === p.id ? 0.6 : 1 }}>
-                      {confirming === p.id ? "..." : "Confirmar"}
-                    </button>
-                    <Link href="/admin/pedidos" style={{ textAlign: "center", fontSize: 12, color: "#78716C", fontWeight: 600, textDecoration: "none" }}>Ver detalhes</Link>
+                    <Link href={`/admin/pedidos?pedido=${p.id}`}
+                      style={{ fontSize: 12, color: "#78716C", fontWeight: 600, fontFamily: "inherit", textDecoration: "none", whiteSpace: "nowrap" }}>
+                      Ver detalhes →
+                    </Link>
                   </div>
                 </div>
               )
             })}
           </div>
-          <div style={{ padding: "12px 18px", borderTop: "1px solid #EDE8EA" }}>
+          <div style={{ padding: "12px 18px", borderTop: "1px solid #EDE8EA", marginTop: "auto" }}>
             <Link href="/admin/pedidos" style={{ fontSize: 13, color: "#F472B6", fontWeight: 700, textDecoration: "none" }}>Ver todos os pedidos →</Link>
           </div>
         </div>
 
-        {/* Low stock */}
-        <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, overflow: "hidden" }}>
-          <div style={{ padding: "16px 18px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>Estoque baixo</span>
-            {lowStock.length > 0 && (
-              <span style={{ background: "#FEF2F2", color: "#DC2626", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
-                {lowStock.length} {lowStock.length === 1 ? "variacao" : "variacoes"}
+        {/* Pedidos de hoje */}
+        <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, overflow: "hidden", display: "flex", flexDirection: "column", minHeight: "clamp(240px, 50vw, 420px)" }}>
+          <div style={{ padding: "16px 18px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
+            <span style={{ fontWeight: 700, fontSize: 14 }}>Pedidos de hoje</span>
+            {todayOrders.length > 0 && (
+              <span style={{ background: "#EFF6FF", color: "#1D4ED8", borderRadius: 4, padding: "2px 8px", fontSize: 11, fontWeight: 800 }}>
+                {todayOrders.length} pedido{todayOrders.length !== 1 ? "s" : ""}
               </span>
             )}
           </div>
-          <div>
-            {lowStock.length === 0 ? (
+          <div style={{ overflowY: "auto", maxHeight: 340, flex: 1 }}>
+            {todayOrders.length === 0 ? (
               <div style={{ padding: "28px 18px", textAlign: "center", color: "#A8A29E" }}>
-                <div style={{ fontWeight: 700, fontSize: 13 }}>Tudo em ordem!</div>
-                <div style={{ fontSize: 12, marginTop: 4 }}>Sem variacoes com estoque critico</div>
+                <div style={{ fontWeight: 700, fontSize: 13 }}>Nenhum pedido hoje</div>
+                <div style={{ fontSize: 12, marginTop: 4 }}>Os pedidos do dia aparecem aqui</div>
               </div>
-            ) : lowStock.map((v, i) => (
-              <div key={`${v.produto_id}-${v.tamanho}`} style={{ padding: "11px 18px", borderBottom: i < lowStock.length - 1 ? "1px solid #F5F0F2" : "none", display: "flex", alignItems: "center", gap: 12 }}>
-                <div style={{ width: 38, height: 38, borderRadius: 8, background: "#FDF2F8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0, border: "1px solid #EDE8EA" }}>👗</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 3, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{v.produto_nome ?? "Produto"}</div>
-                  <div style={{ fontSize: 12, color: "#A8A29E" }}>Tam. {v.tamanho}</div>
-                </div>
-                <span style={{ background: "#FEF9C3", color: "#92400E", borderRadius: 4, padding: "2px 9px", fontSize: 11, fontWeight: 800, flexShrink: 0 }}>
-                  {v.quantidade_disponivel} un.
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Recent orders */}
-      {recentOrders.length > 0 && (
-        <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, overflow: "hidden" }}>
-          <div style={{ padding: "16px 18px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-            <span style={{ fontWeight: 700, fontSize: 14 }}>Pedidos recentes{hasFilter ? ` — ${periodLabel}` : ""}</span>
-            <Link href="/admin/pedidos" style={{ fontSize: 12, color: "#F472B6", fontWeight: 700, textDecoration: "none" }}>Ver todos</Link>
-          </div>
-          <div>
-            {recentOrders.map((o, i) => {
+            ) : todayOrders.map((o, i) => {
               const st = STATUS_META[o.status] ?? STATUS_META.aguardando
-              const date = new Date(o.criado_em).toLocaleDateString("pt-BR")
+              const time = new Date(o.criado_em).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })
               return (
-                <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderBottom: i < recentOrders.length - 1 ? "1px solid #F5F0F2" : "none" }}>
+                <Link key={o.id} href={`/admin/pedidos?pedido=${o.id}`} style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 18px", borderBottom: i < todayOrders.length - 1 ? "1px solid #F5F0F2" : "none", textDecoration: "none", color: "inherit" }}>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontWeight: 700, fontSize: 13 }}>{o.cliente_nome}</div>
-                    <div style={{ fontSize: 11, color: "#A8A29E", marginTop: 2 }}>{date}</div>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "#1C1917" }}>{o.cliente_nome}</div>
+                    <div style={{ fontSize: 11, color: "#A8A29E", marginTop: 2 }}>{time}</div>
                   </div>
-                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: st.bg, borderRadius: 4, padding: "2px 8px" }}>
+                  <div style={{ display: "inline-flex", alignItems: "center", gap: 5, background: st.bg, borderRadius: 4, padding: "2px 8px", flexShrink: 0 }}>
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: st.dot }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: st.color }}>{st.label}</span>
                   </div>
                   <span style={{ fontWeight: 800, fontSize: 13, color: "#F472B6", flexShrink: 0 }}>{fmt(o.total)}</span>
-                </div>
+                </Link>
               )
             })}
           </div>
         </div>
-      )}
-
-      {/* CTA */}
-      <div style={{ background: "linear-gradient(135deg,#FDF2F8 0%,#F5F0FF 100%)", border: "1px solid #EDE8EA", borderRadius: 10, padding: "20px 24px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
-        <div>
-          <div style={{ fontWeight: 700, fontSize: 14, color: "#1C1917" }}>Pronto para cadastrar um novo produto?</div>
-          <div style={{ fontSize: 12, color: "#78716C", marginTop: 4 }}>Adicione fotos, tamanhos e o produto ja aparece no catalogo.</div>
-        </div>
-        <Link href="/admin/produtos/novo" style={{ background: "#1C1917", color: "#fff", borderRadius: 6, padding: "9px 16px", fontWeight: 700, fontSize: 13, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}>
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Novo produto
-        </Link>
       </div>
+
+
+
+      {/* Pedido detail modal */}
+      {detailPedido && (
+        <PedidoDetailModal
+          pedido={detailPedido}
+          onClose={() => setDetailPedido(null)}
+          onConfirm={confirmOrder}
+          confirming={confirming}
+        />
+      )}
     </div>
   )
 }

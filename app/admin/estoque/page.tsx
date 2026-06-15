@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react"
 import Link from "next/link"
-import { createClient } from "@/lib/supabase/client"
+
 
 /* ── types ── */
 interface Variacao { id: string; tamanho: string; quantidade_disponivel: number; quantidade_total: number }
@@ -22,7 +22,7 @@ const STATUS_DISPLAY = {
   esgotado: { label: "Esgotado",      bg: "#FEF2F2", color: "#DC2626", dot: "#EF4444" },
 }
 
-/* ── Drawer de edição ── */
+/* ── Modal de edição ── */
 function StockDrawer({ produto, onClose, onSave }: { produto: Produto; onClose: () => void; onSave: (id: string, variacoes: Variacao[]) => void }) {
   const [qtys, setQtys] = useState<Record<string, number>>(
     Object.fromEntries(produto.variacoes.map((v) => [v.id, v.quantidade_disponivel]))
@@ -37,10 +37,9 @@ function StockDrawer({ produto, onClose, onSave }: { produto: Produto; onClose: 
 
   async function handleSave() {
     setSaving(true)
-    const supabase = createClient()
     await Promise.all(
       produto.variacoes.map((v) =>
-        supabase.from("variacoes_estoque").update({ quantidade_disponivel: qtys[v.id] ?? v.quantidade_disponivel }).eq("id", v.id)
+        fetch("/api/admin/estoque", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: v.id, quantidade_disponivel: qtys[v.id] ?? v.quantidade_disponivel }) })
       )
     )
     const updated = produto.variacoes.map((v) => ({ ...v, quantidade_disponivel: qtys[v.id] ?? v.quantidade_disponivel }))
@@ -59,9 +58,9 @@ function StockDrawer({ produto, onClose, onSave }: { produto: Produto; onClose: 
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.4)", zIndex: 200 }} />
-      <div style={{ position: "fixed", top: 0, right: 0, bottom: 0, zIndex: 201, width: "min(380px,100vw)", background: "#fff", boxShadow: "-4px 0 24px rgba(0,0,0,.08)", display: "flex", flexDirection: "column", animation: "slideIn .2s ease", fontFamily: "inherit" }}>
-        <style>{`@keyframes slideIn{from{opacity:0;transform:translateX(24px)}to{opacity:1;transform:translateX(0)}}`}</style>
+      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,.45)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 16 }} />
+      <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", zIndex: 201, width: "min(460px,calc(100vw - 32px))", maxHeight: "90vh", background: "#fff", borderRadius: 14, boxShadow: "0 8px 40px rgba(0,0,0,.18)", display: "flex", flexDirection: "column", animation: "modalIn .18s ease", fontFamily: "inherit" }}>
+        <style>{`@keyframes modalIn{from{opacity:0;transform:translate(-50%,-46%)}to{opacity:1;transform:translate(-50%,-50%)}}`}</style>
 
         {/* Header */}
         <div style={{ padding: "18px 20px", borderBottom: "1px solid #EDE8EA", display: "flex", alignItems: "center", gap: 12, flexShrink: 0 }}>
@@ -139,16 +138,14 @@ export default function EstoquePage() {
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState("todos")
   const [editing, setEditing] = useState<Produto | null>(null)
+  const [search, setSearch] = useState("")
 
   useEffect(() => {
-    const supabase = createClient()
-    supabase.from("produtos").select("id,nome,fotos,genero,estacao,status,variacoes_estoque(id,tamanho,quantidade_disponivel,quantidade_total)").order("nome").then(({ data }) => {
-      const mapped = (data ?? []).map((p) => ({
-        id: p.id, nome: p.nome, fotos: p.fotos, genero: p.genero, estacao: p.estacao, status: p.status,
-        variacoes: (p.variacoes_estoque as Variacao[] | null ?? []).sort((a, b) => {
-          const order = ["RN","P","M","G","1","2","3","4","6","8","10","12","14","16"]
-          return order.indexOf(a.tamanho) - order.indexOf(b.tamanho)
-        }),
+    fetch("/api/admin/estoque").then(r => r.json()).then(({ produtos: data }) => {
+      const order = ["RN","P","M","G","1","2","3","4","6","8","10","12","14","16"]
+      const mapped = (data ?? []).map((p: Record<string, unknown>) => ({
+        id: p.id, nome: p.nome, fotos: p.fotos as string[] | null, genero: p.genero as string, estacao: p.estacao as string | null, status: p.status as string,
+        variacoes: ((p.variacoes_estoque as Variacao[]) ?? []).sort((a, b) => order.indexOf(a.tamanho) - order.indexOf(b.tamanho)),
       }))
       setProdutos(mapped)
       setLoading(false)
@@ -165,7 +162,8 @@ export default function EstoquePage() {
   const lowCount = produtos.filter((p) => getEstoqueStatus(p.variacoes) === "baixo").length
   const emptyCount = produtos.filter((p) => getEstoqueStatus(p.variacoes) === "esgotado").length
 
-  const filtered = filter === "todos" ? produtos : produtos.filter((p) => getEstoqueStatus(p.variacoes) === filter)
+  const byTab = filter === "todos" ? produtos : produtos.filter((p) => getEstoqueStatus(p.variacoes) === filter)
+  const filtered = search.trim() ? byTab.filter((p) => p.nome.toLowerCase().includes(search.trim().toLowerCase())) : byTab
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 20, fontFamily: "inherit" }}>
@@ -182,7 +180,7 @@ export default function EstoquePage() {
       </div>
 
       {/* Metrics */}
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(2,1fr)", gap: 12 }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: 12 }}>
         <div style={{ background: "#fff", border: "1px solid #EDE8EA", borderRadius: 10, padding: "18px 20px" }}>
           <div style={{ fontWeight: 800, fontSize: 26, lineHeight: 1, marginBottom: 4 }}>{totalUnits}</div>
           <div style={{ fontSize: 12, fontWeight: 600, color: "#78716C" }}>Unidades em estoque</div>
@@ -217,6 +215,23 @@ export default function EstoquePage() {
           })}
         </div>
 
+        {/* Search */}
+        <div style={{ padding: "10px 14px", borderBottom: "1px solid #EDE8EA", background: "#FAFAF9" }}>
+          <div style={{ position: "relative", maxWidth: 300 }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A8A29E" strokeWidth="2.5" strokeLinecap="round" style={{ position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input
+              type="text"
+              placeholder="Buscar produto..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              style={{ width: "100%", boxSizing: "border-box", paddingLeft: 32, paddingRight: search ? 30 : 10, paddingTop: 7, paddingBottom: 7, border: "1px solid #EDE8EA", borderRadius: 7, fontFamily: "inherit", fontSize: 13, color: "#1C1917", background: "#fff", outline: "none" }}
+            />
+            {search && (
+              <button onClick={() => setSearch("")} style={{ position: "absolute", right: 7, top: "50%", transform: "translateY(-50%)", width: 18, height: 18, borderRadius: "50%", border: "none", background: "#E5E0DC", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", color: "#78716C", fontSize: 9, fontWeight: 700, fontFamily: "inherit" }}>X</button>
+            )}
+          </div>
+        </div>
+
         {loading ? (
           <div style={{ padding: "48px 20px", textAlign: "center", color: "#A8A29E", fontWeight: 600 }}>Carregando…</div>
         ) : filtered.length === 0 ? (
@@ -243,7 +258,11 @@ export default function EstoquePage() {
                       onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = "transparent" }}>
                       <td style={{ padding: "13px 16px", verticalAlign: "middle" }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                          <div style={{ width: 36, height: 36, borderRadius: 8, background: "#FDF2F8", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0, border: "1px solid #EDE8EA" }}>👗</div>
+                          <div style={{ width: 36, height: 36, borderRadius: 8, background: "#FDF2F8", overflow: "hidden", flexShrink: 0, border: "1px solid #EDE8EA", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                            {produto.fotos?.[0]
+                              ? <img src={produto.fotos[0]} alt={produto.nome} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                              : <span style={{ fontSize: 16 }}>👗</span>}
+                          </div>
                           <div>
                             <div style={{ fontWeight: 700, fontSize: 13 }}>{produto.nome}</div>
                             <div style={{ fontSize: 11, color: "#A8A29E", marginTop: 1, textTransform: "capitalize" }}>{produto.genero}</div>

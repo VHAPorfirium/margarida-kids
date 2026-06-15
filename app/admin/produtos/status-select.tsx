@@ -4,7 +4,6 @@ import { useState, useTransition } from "react"
 import { useRouter } from "next/navigation"
 import { toast } from "sonner"
 
-import { createClient } from "@/lib/supabase/client"
 import {
   Select,
   SelectContent,
@@ -29,11 +28,8 @@ export function StatusSelect({
     const statusAnterior = status
     setStatus(novoStatus)
 
-    const supabase = createClient()
-    const { error } = await supabase
-      .from("produtos")
-      .update({ status: novoStatus })
-      .eq("id", produtoId)
+    const r = await fetch("/api/admin/produtos", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: produtoId, status: novoStatus }) })
+    const { error } = r.ok ? { error: null } : { error: true }
 
     if (error) {
       setStatus(statusAnterior)
